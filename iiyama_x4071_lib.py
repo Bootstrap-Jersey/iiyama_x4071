@@ -5,6 +5,7 @@ Created on Sat May 13 17:55:52 2017
 
 @author: Mathieu Villion
 """
+import sys
 from serial import Serial
 from subprocess import check_output
 from time import sleep
@@ -374,7 +375,7 @@ class X4071():
             return None
         return self.generic_cmd(b"1048%s\r" % RemoteCode[Option], 1)
 
-    def generic_cmd(self, Cmd, delay=0.1):
+    def generic_cmd(self, Cmd, delay=0.3):
         self.Ser.write(Cmd)
         sleep(delay)
         if self.Ser.in_waiting == 0:
@@ -514,105 +515,88 @@ class X4071():
 
 
 if __name__ == '__main__':
-    Screen = X4071("/dev/ttyUSB0")
+    nArg = len(sys.argv)
+    displaynum = sys.argv[1]
+    serialport = "/dev/ttyUSB0"
+    if displaynum in ["2"]:
+        serialport = "/dev/ttyUSB1"
+    if displaynum in ["3"]:
+        serialport = "/dev/ttyUSB2"
+    if displaynum in ["4"]:
+        serialport = "/dev/ttyUSB3"
+        
+    Screen = X4071(serialport)
 
-    print("Screen size is %s" % get_screen_size().decode())
-    set_screen_size("3840x2160")
+    Command = sys.argv[2]
+    if Command in ["status"]:
+        print("Display %s" % displaynum)
+        print("Screen size is %s" % get_screen_size().decode())
+        set_screen_size("3840x2160")
 
-    print("Screen is %s" % ONOFFCode[Screen.is_power_on()])
-    print("Input is %s" % Screen.get_input_name())
-    print("Picture mode is %s" % Screen.get_picture_mode())
-    print("Brightness is %d%%" % Screen.get_brightness())
-    print(
-        "Lock key control is %s" % ONOFFCode[Screen.is_local_key_control_on()])
-    print("Lock IR control is %s" % ONOFFCode[Screen.is_read_ir_control_on()])
+        print("Screen is %s" % ONOFFCode[Screen.is_power_on()])
+        print("Input is %s" % Screen.get_input_name())
+        print("Picture mode is %s" % Screen.get_picture_mode())
+        print("Brightness is %d%%" % Screen.get_brightness())
+        print(
+            "Lock key control is %s" % ONOFFCode[Screen.is_local_key_control_on()])
+        print("Lock IR control is %s" % ONOFFCode[Screen.is_read_ir_control_on()])
 
-#    for BrightnessPercent in [99, 40]:
-#        print("setting brightness to %d%%" % BrightnessPercent)
-#        Screen.set_brightness(BrightnessPercent)
-#        sleep(1)
-#
-#    Option = True
-#    print("set IR control %d" % Option)
-#    if not Screen.set_ir_control(Option):
-#        print("Command failed!")
-#    sleep(1)
-#
-#    Option = True
-#    print("set local key control %d" % Option)
-#    if not Screen.set_local_key_control(Option):
-#        print("Command failed!")
-#    sleep(1)
-#
-#    for Option in ["mute", "vol+", "vol-"]:
-#        print("sending remote option %s" % Option)
-#        if not Screen.send_remote(Option):
-#            print("Command failed!")
-#        sleep(1)
+        print("____extended command for page 00_____")
+        for (k, v) in Page00OPCode.items():
+            if v[1] == 0:
+                continue
+            Metric = Screen.ext_get(0x00, k)
+            if Metric is None:
+                print(v[0])
+                continue
+            (Max, Value) = Metric
+            print("%s %d / %d" % (v[0], Value, Max))
 
-#    for Option in ["HDMI3", "HDMI1"]:
-#        print("setting input to %s" % Option)
-#        if not Screen.set_input(Option):
-#            print("Command failed!")
-#        sleep(5)  # needed according to spec
+        print("____extended command for page 02_____")
+        for (k, v) in Page02OPCode.items():
+            if v[1] == 0:
+                continue
+            Metric = Screen.ext_get(0x02, k)
+            if Metric is None:
+                print(v[0])
+                continue
+            (Max, Value) = Metric
+            print("%s %d / %d" % (v[0], Value, Max))
 
-#    for Option in ["OFF", "ON"]:
-#        print("setting input to %s" % Option)
-#        if not Screen.set_power(Option):
-#            print("Command failed!")
-#        sleep(14)  # needed according to spec
+        print("serial number is %s" % Screen.read_serial_number().decode("utf-8"))
+        print("model name is %s" % Screen.read_model_name().decode("utf-8"))
 
-#    for Page in range(256):
-#        print("_____%02x____" % Page)
-#        for k in range(256):
-#            if not Screen.ext_has_answer(Page, k):
-#                continue
-#            print("%02x" % k)
+    if Command in ["input"]:
+        if nArg == 3:
+            print("Input on display %s set to %s" % (displaynum, Screen.get_input_name()))
+        else:
+            Option = sys.argv[3]
+            
+            if Option in InputCode:
+                if Option in Screen.get_input_name():
+                    print("Already set to %s" % Option)
+                else:
+                    print("setting input on display %s to %s" % (displaynum, Option))
+                    if not Screen.set_input(Option):
+                        print("Command failed!")
+                    else:
+                        sleep(5)  # needed according to spec
 
-    print("____extended command for page 00_____")
-    for (k, v) in Page00OPCode.items():
-        if v[1] == 0:
-            continue
-        Metric = Screen.ext_get(0x00, k)
-        if Metric is None:
-            print(v[0])
-            continue
-        (Max, Value) = Metric
-        print("%s %d / %d" % (v[0], Value, Max))
+    if Command in ["power"]:
+        Option = sys.argv[3]
+        if Option in PowerCode:
+            print("setting power on display %s to %s" % (displaynum, Option))
+            if not Screen.set_power(Option):
+                print("Command failed!")
+            else:
+                sleep(14)  # needed according to spec
 
-    print("____extended command for page 02_____")
-    for (k, v) in Page02OPCode.items():
-        if v[1] == 0:
-            continue
-        Metric = Screen.ext_get(0x02, k)
-        if Metric is None:
-            print(v[0])
-            continue
-        (Max, Value) = Metric
-        print("%s %d / %d" % (v[0], Value, Max))
 
-#    print("____extended command for page c2_____")
-#    for (k, v) in Pagec2OPCode.items():
-#        if v[1] == 0:
-#            continue
-#        Metric = Screen.ext_command(0xc2, k)
-#        if Metric is None:
-#            print(v[0])
-#            continue
-#        print("%s %s" % (v[0], Metric))
+    if Command in ["irremote"]:
+        print("Lock IR control is %s" % ONOFFCode[Screen.is_read_ir_control_on()])
+        sleep(5)  # needed according to spec
 
-#    print("____extended command tests_____")
-#    for BrightnessPercent in [99, 40]:
-#        print("setting brightness to %d%%" % BrightnessPercent)
-#        Screen.ext_set_from_name("brightness", BrightnessPercent)
-#        sleep(1)
-
-    print("serial number is %s" % Screen.read_serial_number().decode("utf-8"))
-    print("model name is %s" % Screen.read_model_name().decode("utf-8"))
-
-#    # circle on PIP positions
-#    for (rl, bu) in [(0, 0), (0, 1), (1, 1), (1, 0)]:
-#        Screen.ext_set_from_name("PIP right", rl, 1.5)
-#        Screen.ext_set_from_name("PIP bottom", bu, 1.5)
-#
-#    Screen.ext_set_from_name("PIP PBP", 2, 1)
+    if Command in ["wake"]:
+        print("Waking display %s" % displaynum)
+        Screen.ext_set(0, 60, 3, 0.5)
+        sleep(14)  # needed according to spec
